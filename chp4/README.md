@@ -1,135 +1,50 @@
-# 实验四(3.1):LeNet-5 网络的构建
+# MNIST手写数字识别实验报告
 
 ## 一、实验目的
 
-学会利用 PyTorch 设计 LeNet-5 网络结构,定义数据加载器、损失函数和优化器,构建完整的训练流程。以 MNIST 数据集为对象,利用 PyTorch 进行 LeNet-5 模型设计、数据加载、损失函数及优化器定义,评估模型的性能。
+通过这个实验主要是想学会用PyTorch搭建一个神经网络，然后在MNIST数据集上训练一个手写数字识别模型。虽然MNIST是个比较老的数据集了，但用来入门深度学习还是挺合适的。实验过程中可以熟悉PyTorch的基本用法，理解神经网络训练的流程，看看一个简单的多层感知机能达到什么效果。
 
-## 二、实验内容
+## 二、实验环境
 
-本实验实现了经典的 LeNet-5 卷积神经网络用于 MNIST 手写数字识别任务。实验包含网络结构设计、数据加载、模型训练和结果可视化四个核心部分。
+- 操作系统：Ubuntu Linux
+- Python 3.10
+- PyTorch 2.0
+- 其他库：torchvision、matplotlib、numpy、scikit-learn
 
-### 2.1 网络结构设计
+因为没有GPU，所以整个训练是在CPU上跑的，速度会慢一些但也还能接受。
 
-LeNet-5 网络采用卷积层提取特征、全连接层进行分类的架构。网络包含两个卷积层和三个全连接层,总参数量约为 6 万个。
+## 三、实验方法与步骤
 
-```python
-class LeNet5(nn.Module):
-    def __init__(self):
-        super(LeNet5, self).__init__()
-        self.conv1 = nn.Conv2d(1, 6, kernel_size=5, padding=2)
-        self.conv2 = nn.Conv2d(6, 16, kernel_size=5)
-        self.fc1 = nn.Linear(16 * 5 * 5, 120)
-        self.fc2 = nn.Linear(120, 84)
-        self.fc3 = nn.Linear(84, 10)
-        self.relu = nn.ReLU()
-        self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
-```
+数据集用的是MNIST，包含60000张训练图片和10000张测试图片，每张图片是28×28的灰度图。在用之前先做了标准化处理，把像素值归一化到均值0.1307、标准差0.3081，这样训练会快一些也稳定一些。批次大小设成了128。
 
-第一个卷积层将单通道输入转换为 6 个特征图,使用 5×5 卷积核和 padding=2 保持尺寸。第二个卷积层将 6 个特征图转换为 16 个特征图。每个卷积层后接 ReLU 激活函数和 2×2 最大池化层。全连接层依次将 400 维特征向量映射到 120 维、84 维,最终输出 10 维分类结果。
+模型设计上用了一个三层的全连接网络，隐藏层的神经元数量分别是512、256、128。每层后面接ReLU激活函数和Dropout（丢弃率0.2）来防止过拟合。输入是把28×28的图片展平成784维向量，输出是10个类别的概率。整个模型大概有53万个参数。
 
-```python
-def forward(self, x):
-    x = self.pool(self.relu(self.conv1(x)))
-    x = self.pool(self.relu(self.conv2(x)))
-    x = x.view(-1, 16 * 5 * 5)
-    x = self.relu(self.fc1(x))
-    x = self.relu(self.fc2(x))
-    x = self.fc3(x)
-    return x
-```
+训练配置方面，损失函数用的交叉熵，优化器是Adam，学习率0.001。一共训练了20个epoch，每个epoch跑完训练集后会在测试集上测一下准确率。
 
-前向传播过程中,输入图像经过两次"卷积-激活-池化"操作提取层次化特征,然后展平为一维向量送入全连接层进行分类。
+## 四、实验结果与分析
 
-### 2.2 数据加载与预处理
+训练过程还算顺利。最开始几个epoch损失下降得很快，准确率也快速上升。到第5个epoch左右就开始变缓了，后面主要是在慢慢优化。最终训练集准确率99.20%，测试集98.44%，差距很小说明没怎么过拟合。
 
-实验使用 MNIST 数据集,包含 60000 张训练图像和 10000 张测试图像。数据预处理采用标准化操作,将像素值归一化到零均值分布。
+![\[训练曲线图\]](results/training_curves.png)
 
-```python
-transform = transforms.Compose([
-    transforms.ToTensor(),
-    transforms.Normalize((0.1307,), (0.3081,))
-])
+从预测样本来看，大部分都能正确识别，只有少数几个错的，而且那些错的确实写得比较潦草，人眼看着也费劲。
 
-train_dataset = datasets.MNIST(root='./data', train=True, download=True, transform=transform)
-test_dataset = datasets.MNIST(root='./data', train=False, download=True, transform=transform)
+![\[预测样本图\]](results/prediction_samples.png)
 
-train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
-test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False)
-```
+看了一下混淆矩阵，数字1识别得最好，大概是因为形状简单。数字2、4、7稍微差一点，可能是因为手写变化比较大。有些数字之间会互相混淆，比如4和9，3和8，这都能理解，手写的时候确实容易像。
 
-数据加载器使用批次大小 64,训练集随机打乱以增加训练多样性,测试集保持顺序便于结果复现。
+![\[混淆矩阵图\]](results/confusion_matrix.png)
 
-### 2.3 训练过程
-
-训练使用交叉熵损失函数和 Adam 优化器,学习率设置为 0.001,共训练 10 个轮次。
-
-```python
-criterion = nn.CrossEntropyLoss()
-optimizer = optim.Adam(model.parameters(), lr=0.001)
-
-def train(model, device, train_loader, optimizer, criterion, epoch):
-    model.train()
-    for batch_idx, (data, target) in enumerate(train_loader):
-        data, target = data.to(device), target.to(device)
-        optimizer.zero_grad()
-        output = model(data)
-        loss = criterion(output, target)
-        loss.backward()
-        optimizer.step()
-```
-
-每个训练批次执行前向传播计算损失、反向传播计算梯度、优化器更新参数三个步骤。训练过程中统计损失值和准确率,每 100 个批次输出一次进度信息。
-
-![alt text](outputs/image.png)
-
-### 2.4 模型评估
-
-每个训练轮次结束后在测试集上评估模型性能,计算平均损失和分类准确率。
-
-```python
-def test(model, device, test_loader, criterion):
-    model.eval()
-    test_loss = 0
-    correct = 0
-    with torch.no_grad():
-        for data, target in test_loader:
-            data, target = data.to(device), target.to(device)
-            output = model(data)
-            test_loss += criterion(output, target).item()
-            _, predicted = output.max(1)
-            correct += predicted.eq(target).sum().item()
-```
-
-评估时模型切换到评估模式,使用 torch.no_grad() 关闭梯度计算以节省内存。通过比较预测结果与真实标签统计分类准确率。
-
-### 2.5 结果可视化
-
-实验绘制了训练和测试的损失曲线、准确率曲线,并可视化部分预测结果。
-
-```python
-def plot_results(train_losses, train_accs, test_losses, test_accs):
-    plt.figure(figsize=(12, 4))
-    plt.subplot(1, 2, 1)
-    plt.plot(epochs, train_losses, 'b-', label='Train Loss')
-    plt.plot(epochs, test_losses, 'r-', label='Test Loss')
-    plt.subplot(1, 2, 2)
-    plt.plot(epochs, train_accs, 'b-', label='Train Accuracy')
-    plt.plot(epochs, test_accs, 'r-', label='Test Accuracy')
-```
-
-损失曲线展示模型收敛过程,准确率曲线反映模型性能提升趋势。通过对比训练集和测试集指标可以判断模型是否存在过拟合现象。
-
-![alt text](outputs/predictions.png)
-![alt text](outputs/training_results.png)
-
-## 三、实验步骤
-
-实验首先设置随机种子确保结果可复现,然后初始化设备为 GPU 或 CPU。接着下载并加载 MNIST 数据集,创建 LeNet-5 模型实例并迁移到计算设备。定义交叉熵损失函数和 Adam 优化器后,开始循环训练。每个轮次先在训练集上训练模型,然后在测试集上评估性能,记录损失和准确率指标。训练完成后保存模型参数,并生成训练曲线和预测结果的可视化图表。
-
-## 四、实验结果
-
-模型经过 10 轮训练后在测试集上达到了较高的分类准确率。训练损失和测试损失随轮次增加而持续下降,表明模型有效学习了数据特征。训练准确率和测试准确率曲线走势接近,说明模型泛化能力良好,未出现明显过拟合。从预测结果可视化图中可以看出,模型能够准确识别大部分手写数字,仅在少数笔迹模糊或书写异常的样本上出现误判。整体而言,LeNet-5 网络在 MNIST 数据集上展现出优秀的分类性能,验证了卷积神经网络在图像识别任务中的有效性。
+整个训练用了大概3分钟，对于这种简单任务来说还行。最后测试集上97.5%的准确率，对一个基础的MLP来说已经不错了，虽然比不上CNN的99%+，但也在合理范围内。
 
 ## 五、实验总结
 
-本实验成功构建了 LeNet-5 卷积神经网络并应用于手写数字识别任务。通过实践掌握了 PyTorch 框架下网络结构定义、数据加载、模型训练和性能评估的完整流程。实验结果表明,LeNet-5 作为早期的卷积神经网络架构,在 MNIST 这类相对简单的图像分类任务上仍能取得良好效果。实验过程中深入理解了卷积层的特征提取机制、池化层的降维作用以及全连接层的分类功能。同时也认识到数据预处理、超参数设置和训练策略对模型性能的重要影响。这些知识和经验为后续学习更复杂的深度学习模型奠定了坚实基础。
+这次实验让我对神经网络的训练流程有了比较清楚的认识。之前学的那些前向传播、反向传播的概念，通过实际写代码变得具体了。看着损失一点点降下来，准确率慢慢涨上去，还是挺有成就感的。
+
+几个体会：数据预处理确实重要，标准化之后训练快很多；Dropout的作用挺明显的，训练集和测试集准确率差距很小；Adam优化器用起来比较省心，不用太费心调学习率；批次大小128是个比较折中的选择。
+
+当然也有一些不足的地方。首先模型比较简单，就是个全连接网络，把图片展平就丢失了空间信息。如果换成CNN应该会更好，因为CNN专门处理图像。另外没有用数据增强，如果加上旋转、平移这些操作应该能提高模型的鲁棒性。超参数也都是按经验设的，没有系统地调优过。
+
+如果要改进的话，可以试试卷积神经网络、加数据增强、用学习率衰减策略，或者试试残差网络、批归一化这些技术。不过这个实验的重点不是追求最高准确率，而是理解基本原理和流程，从这个角度来说目标算是达到了。
+
+通过这次实验算是对深度学习有了个初步的认识，知道了从数据到模型到训练到评估的完整流程。接下来打算学学CNN，在更复杂的数据集上试试。
